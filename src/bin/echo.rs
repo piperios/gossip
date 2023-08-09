@@ -1,7 +1,7 @@
 use anyhow::Context;
 use gossip::{Message, Response};
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::io::{Read, Write};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -33,7 +33,7 @@ enum ResponseTypes {
 
 #[derive(Debug)]
 struct Node {
-    msg: Message<ResponseTypes>,
+    msg: Option<Message<ResponseTypes>>,
 }
 
 impl Response<ResponseTypes> for Node {
@@ -45,34 +45,36 @@ impl Response<ResponseTypes> for Node {
     {
         let mut reply: Option<Self::MessageImpl> = None;
 
-        match &self.msg.body {
-            ResponseTypes::Init { msg_id, .. } => {
-                reply = Some(Message {
-                    src: self.msg.dest.clone(),
-                    dest: self.msg.src.clone(),
-                    body: ResponseTypes::InitOk {
-                        in_reply_to: *msg_id,
-                    },
-                });
-            }
-            ResponseTypes::Echo { msg_id, echo } => {
-                reply = Some(Message {
-                    src: self.msg.dest.clone(),
-                    dest: self.msg.src.clone(),
-                    body: ResponseTypes::EchoOk {
-                        msg_id: *msg_id,
-                        in_reply_to: *msg_id,
-                        echo: echo.clone(),
-                    },
-                });
-            }
-            ResponseTypes::Error { text, .. } => {
-                eprintln!("{}", text);
-            }
-            _ => {
-                eprintln!("{}", "Impossible input!");
-            }
-        };
+        if let Some(ref msg) = &self.msg {
+            match &msg.body {
+                ResponseTypes::Init { msg_id, .. } => {
+                    reply = Some(Message {
+                        src: msg.dest.clone(),
+                        dest: msg.src.clone(),
+                        body: ResponseTypes::InitOk {
+                            in_reply_to: *msg_id,
+                        },
+                    });
+                }
+                ResponseTypes::Echo { msg_id, echo } => {
+                    reply = Some(Message {
+                        src: msg.dest.clone(),
+                        dest: msg.src.clone(),
+                        body: ResponseTypes::EchoOk {
+                            msg_id: *msg_id,
+                            in_reply_to: *msg_id,
+                            echo: echo.clone(),
+                        },
+                    });
+                }
+                ResponseTypes::Error { text, .. } => {
+                    eprintln!("{}", text);
+                }
+                _ => {
+                    eprintln!("{}", "Impossible input!");
+                }
+            };
+        }
 
         if let Some(reply) = reply {
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
@@ -81,20 +83,30 @@ impl Response<ResponseTypes> for Node {
 
         Ok(())
     }
+
+    fn run_loop<R, W>(&mut self, input: R, mut output: W) -> anyhow::Result<()>
+    where
+        R: Read,
+        W: Write,
+    {
+        let inputs =
+            serde_json::Deserializer::from_reader(input).into_iter::<Message<ResponseTypes>>();
+
+        for i in inputs {
+            self.msg = Some(i.context("Couldn't deserialize STDIN")?);
+            self.serialize(&mut output)?;
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> anyhow::Result<()> {
     let stdin = std::io::stdin().lock();
-    let mut stdout = std::io::stdout().lock();
+    let stdout = std::io::stdout().lock();
 
-    let inputs = serde_json::Deserializer::from_reader(stdin).into_iter::<Message<ResponseTypes>>();
-
-    for i in inputs {
-        Node {
-            msg: i.context("Couldn't deserialize STDIN")?,
-        }
-        .serialize(&mut stdout)?;
-    }
+    let mut node = Node { msg: None };
+    node.run_loop(stdin, stdout)?;
 
     Ok(())
 }

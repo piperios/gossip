@@ -2,7 +2,7 @@ use anyhow::Context;
 use gossip::{Message, Response};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{Read, Write};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -55,50 +55,50 @@ impl Response<ResponseTypes> for Node {
     {
         let mut reply: Option<Self::MessageImpl> = None;
 
-        let msg = &self.msg.as_ref().unwrap();
-
-        match &msg.body {
-            ResponseTypes::Init { msg_id, .. } => {
-                reply = Some(Message {
-                    src: msg.dest.clone(),
-                    dest: msg.src.clone(),
-                    body: ResponseTypes::InitOk {
-                        in_reply_to: *msg_id,
-                    },
-                });
-            }
-            ResponseTypes::Broadcast { message } => {
-                self.msg_ids.push(*message);
-                reply = Some(Message {
-                    src: msg.dest.clone(),
-                    dest: msg.src.clone(),
-                    body: ResponseTypes::BroadcastOk,
-                })
-            }
-            ResponseTypes::Topology(update) => {
-                self.topology = update.clone();
-                reply = Some(Message {
-                    src: msg.dest.clone(),
-                    dest: msg.src.clone(),
-                    body: ResponseTypes::TopologyOk,
-                })
-            }
-            ResponseTypes::Read => {
-                reply = Some(Message {
-                    src: msg.dest.clone(),
-                    dest: msg.src.clone(),
-                    body: ResponseTypes::ReadOk {
-                        messages: self.msg_ids.clone(),
-                    },
-                })
-            }
-            ResponseTypes::Error { text, .. } => {
-                eprintln!("{}", text);
-            }
-            _ => {
-                eprintln!("{}", "Impossible input!");
-            }
-        };
+        if let Some(ref msg) = &self.msg {
+            match &msg.body {
+                ResponseTypes::Init { msg_id, .. } => {
+                    reply = Some(Message {
+                        src: msg.dest.clone(),
+                        dest: msg.src.clone(),
+                        body: ResponseTypes::InitOk {
+                            in_reply_to: *msg_id,
+                        },
+                    });
+                }
+                ResponseTypes::Broadcast { message } => {
+                    self.msg_ids.push(*message);
+                    reply = Some(Message {
+                        src: msg.dest.clone(),
+                        dest: msg.src.clone(),
+                        body: ResponseTypes::BroadcastOk,
+                    })
+                }
+                ResponseTypes::Topology(update) => {
+                    self.topology = update.clone();
+                    reply = Some(Message {
+                        src: msg.dest.clone(),
+                        dest: msg.src.clone(),
+                        body: ResponseTypes::TopologyOk,
+                    })
+                }
+                ResponseTypes::Read => {
+                    reply = Some(Message {
+                        src: msg.dest.clone(),
+                        dest: msg.src.clone(),
+                        body: ResponseTypes::ReadOk {
+                            messages: self.msg_ids.clone(),
+                        },
+                    })
+                }
+                ResponseTypes::Error { text, .. } => {
+                    eprintln!("{}", text);
+                }
+                _ => {
+                    eprintln!("{}", "Impossible input!");
+                }
+            };
+        }
 
         if let Some(reply) = reply {
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
@@ -107,24 +107,34 @@ impl Response<ResponseTypes> for Node {
 
         Ok(())
     }
+
+    fn run_loop<R, W>(&mut self, input: R, mut output: W) -> anyhow::Result<()>
+    where
+        R: Read,
+        W: Write,
+    {
+        let inputs =
+            serde_json::Deserializer::from_reader(input).into_iter::<Message<ResponseTypes>>();
+
+        for i in inputs {
+            self.msg = Some(i.context("Couldn't deserialize STDIN")?);
+            self.serialize(&mut output)?;
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> anyhow::Result<()> {
     let stdin = std::io::stdin().lock();
-    let mut stdout = std::io::stdout().lock();
-
-    let inputs = serde_json::Deserializer::from_reader(stdin).into_iter::<Message<ResponseTypes>>();
+    let stdout = std::io::stdout().lock();
 
     let mut node = Node {
         msg: None,
         msg_ids: Vec::new(),
         topology: HashMap::new(),
     };
-
-    for i in inputs {
-        node.msg = Some(i.context("Couldn't deserialize STDIN")?);
-        node.serialize(&mut stdout)?;
-    }
+    node.run_loop(stdin, stdout)?;
 
     Ok(())
 }

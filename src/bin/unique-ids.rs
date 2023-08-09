@@ -1,7 +1,7 @@
 use anyhow::Context;
 use gossip::{Message, Response};
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::io::{Read, Write};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -81,13 +81,27 @@ impl Response<ResponseTypes> for Node {
 
         Ok(())
     }
+
+    fn run_loop<R, W>(&mut self, input: R, mut output: W) -> anyhow::Result<()>
+    where
+        R: Read,
+        W: Write,
+    {
+        let inputs =
+            serde_json::Deserializer::from_reader(input).into_iter::<Message<ResponseTypes>>();
+
+        for i in inputs {
+            self.msg = Some(i.context("Couldn't deserialize STDIN")?);
+            self.serialize(&mut output)?;
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> anyhow::Result<()> {
     let stdin = std::io::stdin().lock();
-    let mut stdout = std::io::stdout().lock();
-
-    let inputs = serde_json::Deserializer::from_reader(stdin).into_iter::<Message<ResponseTypes>>();
+    let stdout = std::io::stdout().lock();
 
     let mut node = Node {
         node_id: String::new(),
@@ -95,10 +109,7 @@ fn main() -> anyhow::Result<()> {
         msg: None,
     };
 
-    for i in inputs {
-        node.msg = Some(i.context("Couldn't deserialize STDIN")?);
-        node.serialize(&mut stdout)?;
-    }
+    node.run_loop(stdin, stdout)?;
 
     Ok(())
 }

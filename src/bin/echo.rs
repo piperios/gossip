@@ -39,7 +39,10 @@ struct Node {
 impl Response<ResponseTypes> for Node {
     type MessageImpl = Message<ResponseTypes>;
 
-    fn serialize(&mut self, output: &mut impl Write) -> anyhow::Result<()> {
+    fn serialize<W>(&mut self, output: &mut W) -> anyhow::Result<()>
+    where
+        W: Write,
+    {
         let mut reply: Option<Self::MessageImpl> = None;
 
         match &self.msg.body {

@@ -10,5 +10,7 @@ pub struct Message<Body> {
 
 pub trait Response<Body> {
     type MessageImpl;
-    fn serialize(&mut self, output: &mut impl Write) -> anyhow::Result<()>;
+    fn serialize<W>(&mut self, output: &mut W) -> anyhow::Result<()>
+    where
+        W: Write;
 }

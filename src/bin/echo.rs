@@ -1,5 +1,5 @@
 use anyhow::Context;
-use gossip::{Message, Response};
+use gossip::{Message, Payload, Response};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
@@ -8,24 +8,17 @@ use std::io::{Read, Write};
 #[serde(rename_all = "snake_case")]
 enum ResponseTypes {
     Init {
-        msg_id: usize,
         node_id: String,
         node_ids: Vec<String>,
     },
-    InitOk {
-        in_reply_to: usize,
-    },
+    InitOk,
     Echo {
-        msg_id: usize,
         echo: String,
     },
     EchoOk {
-        msg_id: usize,
-        in_reply_to: usize,
         echo: String,
     },
     Error {
-        in_reply_to: usize,
         code: usize,
         text: String,
     },
@@ -46,24 +39,26 @@ impl Response<ResponseTypes> for Node {
         let mut reply: Option<Self::MessageImpl> = None;
 
         if let Some(ref msg) = &self.msg {
-            match &msg.body {
-                ResponseTypes::Init { msg_id, .. } => {
+            match &msg.body.payload {
+                ResponseTypes::Init { .. } => {
                     reply = Some(Message {
                         src: msg.dest.clone(),
                         dest: msg.src.clone(),
-                        body: ResponseTypes::InitOk {
-                            in_reply_to: *msg_id,
+                        body: Payload {
+                            msg_id: msg.body.msg_id,
+                            in_reply_to: msg.body.msg_id,
+                            payload: ResponseTypes::InitOk,
                         },
                     });
                 }
-                ResponseTypes::Echo { msg_id, echo } => {
+                ResponseTypes::Echo { echo } => {
                     reply = Some(Message {
                         src: msg.dest.clone(),
                         dest: msg.src.clone(),
-                        body: ResponseTypes::EchoOk {
-                            msg_id: *msg_id,
-                            in_reply_to: *msg_id,
-                            echo: echo.clone(),
+                        body: Payload {
+                            msg_id: msg.body.msg_id,
+                            in_reply_to: msg.body.msg_id,
+                            payload: ResponseTypes::EchoOk { echo: echo.clone() },
                         },
                     });
                 }

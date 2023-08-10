@@ -2,10 +2,18 @@ use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Message<Body> {
+pub struct Message<T> {
     pub src: String,
     pub dest: String,
-    pub body: Body,
+    pub body: Payload<T>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Payload<T> {
+    pub msg_id: Option<usize>,
+    pub in_reply_to: Option<usize>,
+    #[serde(flatten)]
+    pub payload: T,
 }
 
 pub trait Response<Body> {

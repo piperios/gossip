@@ -1,5 +1,5 @@
 use anyhow::Context;
-use gossip::{Message, Response};
+use gossip::{Message, Payload, Response};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
@@ -8,24 +8,16 @@ use std::io::{Read, Write};
 #[serde(rename_all = "snake_case")]
 enum ResponseTypes {
     Init {
-        msg_id: usize,
         node_id: String,
         node_ids: Vec<String>,
     },
-    InitOk {
-        in_reply_to: usize,
-    },
-    Generate {
-        msg_id: usize,
-    },
+    InitOk,
+    Generate,
     GenerateOk {
-        msg_id: usize,
-        in_reply_to: usize,
         #[serde(rename = "id")]
         guid: String,
     },
     Error {
-        in_reply_to: usize,
         code: usize,
         text: String,
     },
@@ -48,29 +40,29 @@ impl Response<ResponseTypes> for Node {
         let mut reply: Option<Self::MessageImpl> = None;
 
         if let Some(ref msg) = &self.msg {
-            match &msg.body {
-                ResponseTypes::Init {
-                    msg_id, node_id, ..
-                } => {
+            match &msg.body.payload {
+                ResponseTypes::Init { node_id, .. } => {
                     self.node_id = node_id.clone();
                     reply = Some(Message {
                         src: msg.dest.clone(),
                         dest: msg.src.clone(),
-                        body: ResponseTypes::InitOk {
-                            in_reply_to: *msg_id,
+                        body: Payload {
+                            msg_id: Some(msg.body.msg_id.unwrap() + 1),
+                            in_reply_to: msg.body.msg_id,
+                            payload: ResponseTypes::InitOk,
                         },
                     });
                 }
-                ResponseTypes::Generate { msg_id } => {
+                ResponseTypes::Generate => {
                     let guid = format!("{}-{}", self.node_id.clone(), self.id);
                     self.id += 1;
                     reply = Some(Message {
                         src: msg.dest.clone(),
                         dest: msg.src.clone(),
-                        body: ResponseTypes::GenerateOk {
-                            msg_id: *msg_id + 1,
-                            in_reply_to: *msg_id,
-                            guid,
+                        body: Payload {
+                            msg_id: Some(msg.body.msg_id.unwrap() + 1),
+                            in_reply_to: msg.body.msg_id,
+                            payload: ResponseTypes::GenerateOk { guid },
                         },
                     });
                 }

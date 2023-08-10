@@ -16,6 +16,26 @@ pub struct Payload<T> {
     pub payload: T,
 }
 
+impl<T> Message<T> {
+    pub fn new(msg: &Message<T>, payload: Payload<T>) -> Message<T> {
+        Self {
+            src: msg.dest.clone(),
+            dest: msg.src.clone(),
+            body: payload,
+        }
+    }
+}
+
+impl<T> Payload<T> {
+    pub fn from_msg(id: Option<usize>, response: T) -> Option<Self> {
+        Some(Self {
+            msg_id: Some(id.unwrap() + 1),
+            in_reply_to: id,
+            payload: response,
+        })
+    }
+}
+
 pub trait Response<Body> {
     type MessageImpl;
     fn serialize<W>(&mut self, output: &mut W) -> anyhow::Result<()>

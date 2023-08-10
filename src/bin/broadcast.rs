@@ -53,36 +53,23 @@ impl Response<ResponseTypes> for Node {
         if let Some(ref msg) = &self.msg {
             match &msg.body.payload {
                 ResponseTypes::Init { .. } => {
-                    payload = Some(Payload {
-                        msg_id: Some(msg.body.msg_id.unwrap() + 1),
-                        in_reply_to: msg.body.msg_id,
-                        payload: ResponseTypes::InitOk,
-                    });
+                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::InitOk);
                 }
                 ResponseTypes::Broadcast { message } => {
                     self.msg_ids.push(*message);
-                    payload = Some(Payload {
-                        msg_id: Some(msg.body.msg_id.unwrap() + 1),
-                        in_reply_to: msg.body.msg_id,
-                        payload: ResponseTypes::BroadcastOk,
-                    });
+                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::BroadcastOk);
                 }
                 ResponseTypes::Topology(update) => {
                     self.topology = update.clone();
-                    payload = Some(Payload {
-                        msg_id: Some(msg.body.msg_id.unwrap() + 1),
-                        in_reply_to: msg.body.msg_id,
-                        payload: ResponseTypes::TopologyOk,
-                    });
+                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::TopologyOk);
                 }
                 ResponseTypes::Read => {
-                    payload = Some(Payload {
-                        msg_id: Some(msg.body.msg_id.unwrap() + 1),
-                        in_reply_to: msg.body.msg_id,
-                        payload: ResponseTypes::ReadOk {
+                    payload = Payload::from_msg(
+                        msg.body.msg_id,
+                        ResponseTypes::ReadOk {
                             messages: self.msg_ids.clone(),
                         },
-                    });
+                    );
                 }
                 ResponseTypes::Error { text, .. } => {
                     eprintln!("{}", text);
@@ -94,13 +81,7 @@ impl Response<ResponseTypes> for Node {
         }
 
         if let Some(payload) = payload {
-            let msg = self.msg.as_ref().unwrap();
-            let reply = Message {
-                src: msg.dest.clone(),
-                dest: msg.src.clone(),
-                body: payload,
-            };
-
+            let reply = Message::new(self.msg.as_ref().unwrap(), payload);
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
             output.write_all(b"\n").context("Couldn't add newline")?;
         }

@@ -42,20 +42,13 @@ impl Response<ResponseTypes> for Node {
             match &msg.body.payload {
                 ResponseTypes::Init { node_id, .. } => {
                     self.node_id = node_id.clone();
-                    payload = Some(Payload {
-                        msg_id: Some(msg.body.msg_id.unwrap() + 1),
-                        in_reply_to: msg.body.msg_id,
-                        payload: ResponseTypes::InitOk,
-                    });
+                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::InitOk);
                 }
                 ResponseTypes::Generate => {
                     let guid = format!("{}-{}", self.node_id.clone(), self.id);
                     self.id += 1;
-                    payload = Some(Payload {
-                        msg_id: Some(msg.body.msg_id.unwrap() + 1),
-                        in_reply_to: msg.body.msg_id,
-                        payload: ResponseTypes::GenerateOk { guid },
-                    });
+                    payload =
+                        Payload::from_msg(msg.body.msg_id, ResponseTypes::GenerateOk { guid });
                 }
                 ResponseTypes::Error { text, .. } => {
                     eprintln!("{}", text);
@@ -67,13 +60,7 @@ impl Response<ResponseTypes> for Node {
         }
 
         if let Some(payload) = payload {
-            let msg = self.msg.as_ref().unwrap();
-            let reply = Message {
-                src: msg.dest.clone(),
-                dest: msg.src.clone(),
-                body: payload,
-            };
-
+            let reply = Message::new(self.msg.as_ref().unwrap(), payload);
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
             output.write_all(b"\n").context("Couldn't add newline")?;
         }

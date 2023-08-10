@@ -36,30 +36,21 @@ impl Response<ResponseTypes> for Node {
     where
         W: Write,
     {
-        let mut reply: Option<Self::MessageImpl> = None;
-
+        let mut payload: Option<Payload<ResponseTypes>> = None;
         if let Some(ref msg) = &self.msg {
             match &msg.body.payload {
                 ResponseTypes::Init { .. } => {
-                    reply = Some(Message {
-                        src: msg.dest.clone(),
-                        dest: msg.src.clone(),
-                        body: Payload {
-                            msg_id: msg.body.msg_id,
-                            in_reply_to: msg.body.msg_id,
-                            payload: ResponseTypes::InitOk,
-                        },
+                    payload = Some(Payload {
+                        msg_id: msg.body.msg_id,
+                        in_reply_to: msg.body.msg_id,
+                        payload: ResponseTypes::InitOk,
                     });
                 }
                 ResponseTypes::Echo { echo } => {
-                    reply = Some(Message {
-                        src: msg.dest.clone(),
-                        dest: msg.src.clone(),
-                        body: Payload {
-                            msg_id: msg.body.msg_id,
-                            in_reply_to: msg.body.msg_id,
-                            payload: ResponseTypes::EchoOk { echo: echo.clone() },
-                        },
+                    payload = Some(Payload {
+                        msg_id: msg.body.msg_id,
+                        in_reply_to: msg.body.msg_id,
+                        payload: ResponseTypes::EchoOk { echo: echo.clone() },
                     });
                 }
                 ResponseTypes::Error { text, .. } => {
@@ -71,7 +62,14 @@ impl Response<ResponseTypes> for Node {
             };
         }
 
-        if let Some(reply) = reply {
+        if let Some(payload) = payload {
+            let msg = self.msg.as_ref().unwrap();
+            let reply = Message {
+                src: msg.dest.clone(),
+                dest: msg.src.clone(),
+                body: payload,
+            };
+
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
             output.write_all(b"\n").context("Couldn't add newline")?;
         }

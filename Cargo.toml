@@ -11,6 +11,10 @@ path = "src/bin/echo.rs"
 name = "unique-ids"
 path = "src/bin/unique-ids.rs"
 
+[[bin]]
+name = "broadcast"
+path = "src/bin/broadcast.rs"
+
 [dependencies]
 anyhow = "1.0"
 serde = { version = "1.0.180", features = ["derive"] }

@@ -15,8 +15,12 @@ enum ResponseTypes {
     InitOk {
         in_reply_to: usize,
     },
-    Generate,
-    GenereteOk {
+    Generate {
+        msg_id: usize,
+    },
+    GenerateOk {
+        msg_id: usize,
+        in_reply_to: usize,
         #[serde(rename = "id")]
         guid: String,
     },
@@ -57,12 +61,17 @@ impl Response<ResponseTypes> for Node {
                         },
                     });
                 }
-                ResponseTypes::Generate => {
+                ResponseTypes::Generate { msg_id } => {
                     let guid = format!("{}-{}", self.node_id.clone(), self.id);
+                    self.id += 1;
                     reply = Some(Message {
                         src: msg.dest.clone(),
                         dest: msg.src.clone(),
-                        body: ResponseTypes::GenereteOk { guid },
+                        body: ResponseTypes::GenerateOk {
+                            msg_id: *msg_id + 1,
+                            in_reply_to: *msg_id,
+                            guid,
+                        },
                     });
                 }
                 ResponseTypes::Error { text, .. } => {

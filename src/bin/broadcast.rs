@@ -21,12 +21,10 @@ enum ResponseTypes {
     ReadOk {
         messages: Vec<usize>,
     },
-    Topology(HashMap<String, Vec<String>>),
-    TopologyOk,
-    Error {
-        code: usize,
-        text: String,
+    Topology {
+        topology: HashMap<String, Vec<String>>,
     },
+    TopologyOk,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,38 +47,27 @@ impl Response<ResponseTypes> for Node {
     where
         W: Write,
     {
-        let mut payload: Option<Payload<ResponseTypes>> = None;
         if let Some(ref msg) = &self.msg {
-            match &msg.body.payload {
-                ResponseTypes::Init { .. } => {
-                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::InitOk);
-                }
-                ResponseTypes::Broadcast { message } => {
-                    self.msg_ids.push(*message);
-                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::BroadcastOk);
-                }
-                ResponseTypes::Topology(update) => {
-                    self.topology = update.clone();
-                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::TopologyOk);
-                }
-                ResponseTypes::Read => {
-                    payload = Payload::from_msg(
-                        msg.body.msg_id,
-                        ResponseTypes::ReadOk {
-                            messages: self.msg_ids.clone(),
-                        },
-                    );
-                }
-                ResponseTypes::Error { text, .. } => {
-                    eprintln!("{}", text);
-                }
-                _ => {
-                    eprintln!("{}", "Impossible input!");
-                }
-            };
-        }
+            let payload = Payload::from_msg(
+                msg.body.msg_id,
+                match &msg.body.payload {
+                    ResponseTypes::Init { .. } => Some(ResponseTypes::InitOk),
+                    ResponseTypes::Broadcast { message } => {
+                        self.msg_ids.push(*message);
+                        Some(ResponseTypes::BroadcastOk)
+                    }
+                    ResponseTypes::Read => Some(ResponseTypes::ReadOk {
+                        messages: self.msg_ids.clone(),
+                    }),
+                    ResponseTypes::Topology { topology } => {
+                        self.topology = topology.clone();
+                        Some(ResponseTypes::TopologyOk)
+                    }
+                    _ => panic!("Impossible input!"),
+                },
+            )
+            .unwrap();
 
-        if let Some(payload) = payload {
             let reply = Message::new(self.msg.as_ref().unwrap(), payload);
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
             output.write_all(b"\n").context("Couldn't add newline")?;

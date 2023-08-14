@@ -37,29 +37,24 @@ impl Response<ResponseTypes> for Node {
     where
         W: Write,
     {
-        let mut payload: Option<Payload<ResponseTypes>> = None;
         if let Some(ref msg) = &self.msg {
-            match &msg.body.payload {
-                ResponseTypes::Init { node_id, .. } => {
-                    self.node_id = node_id.clone();
-                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::InitOk);
-                }
-                ResponseTypes::Generate => {
-                    let guid = format!("{}-{}", self.node_id.clone(), self.id);
-                    self.id += 1;
-                    payload =
-                        Payload::from_msg(msg.body.msg_id, ResponseTypes::GenerateOk { guid });
-                }
-                ResponseTypes::Error { text, .. } => {
-                    eprintln!("{}", text);
-                }
-                _ => {
-                    eprintln!("{}", "Impossible input!");
-                }
-            };
-        }
+            let payload = Payload::from_msg(
+                msg.body.msg_id,
+                match &msg.body.payload {
+                    ResponseTypes::Init { node_id, .. } => {
+                        self.node_id = node_id.clone();
+                        Some(ResponseTypes::InitOk)
+                    }
+                    ResponseTypes::Generate => {
+                        let guid = format!("{}-{}", self.node_id.clone(), self.id);
+                        self.id += 1;
+                        Some(ResponseTypes::GenerateOk { guid })
+                    }
+                    _ => panic!("{}", "Impossible input!"),
+                },
+            )
+            .unwrap();
 
-        if let Some(payload) = payload {
             let reply = Message::new(self.msg.as_ref().unwrap(), payload);
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
             output.write_all(b"\n").context("Couldn't add newline")?;

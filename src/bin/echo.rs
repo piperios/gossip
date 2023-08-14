@@ -1,4 +1,5 @@
 use anyhow::Context;
+use core::panic;
 use gossip::{Message, Payload, Response};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -36,28 +37,19 @@ impl Response<ResponseTypes> for Node {
     where
         W: Write,
     {
-        let mut payload: Option<Payload<ResponseTypes>> = None;
         if let Some(ref msg) = &self.msg {
-            match &msg.body.payload {
-                ResponseTypes::Init { .. } => {
-                    payload = Payload::from_msg(msg.body.msg_id, ResponseTypes::InitOk);
-                }
-                ResponseTypes::Echo { echo } => {
-                    payload = Payload::from_msg(
-                        msg.body.msg_id,
-                        ResponseTypes::EchoOk { echo: echo.clone() },
-                    );
-                }
-                ResponseTypes::Error { text, .. } => {
-                    eprintln!("{}", text);
-                }
-                _ => {
-                    eprintln!("{}", "Impossible input!");
-                }
-            };
-        }
+            let payload = Payload::from_msg(
+                msg.body.msg_id,
+                match &msg.body.payload {
+                    ResponseTypes::Init { .. } => Some(ResponseTypes::InitOk),
+                    ResponseTypes::Echo { echo } => {
+                        Some(ResponseTypes::EchoOk { echo: echo.clone() })
+                    }
+                    _ => panic!("Impossible input!"),
+                },
+            )
+            .unwrap();
 
-        if let Some(payload) = payload {
             let reply = Message::new(&self.msg.as_ref().unwrap(), payload);
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
             output.write_all(b"\n").context("Couldn't add newline")?;

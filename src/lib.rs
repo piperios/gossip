@@ -27,20 +27,22 @@ impl<T> Message<T> {
 }
 
 impl<T> Payload<T> {
-    pub fn from_msg(id: Option<usize>, response: T) -> Option<Self> {
+    pub fn from_msg(id: Option<usize>, response: Option<T>) -> Option<Self> {
         Some(Self {
             msg_id: Some(id.unwrap() + 1),
             in_reply_to: id,
-            payload: response,
+            payload: response.unwrap(),
         })
     }
 }
 
 pub trait Response<Body> {
     type MessageImpl;
+
     fn serialize<W>(&mut self, output: &mut W) -> anyhow::Result<()>
     where
         W: Write;
+
     fn run_loop<R, W>(&mut self, input: R, output: W) -> anyhow::Result<()>
     where
         R: Read,

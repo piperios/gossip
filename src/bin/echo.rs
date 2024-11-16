@@ -50,7 +50,7 @@ impl Response<ResponseTypes> for Node {
             )
             .unwrap();
 
-            let reply = Message::new(&self.msg.as_ref().unwrap(), payload);
+            let reply = Message::new(self.msg.as_ref().unwrap(), payload);
             serde_json::to_writer(&mut *output, &reply).context("Couldn't serialize reply")?;
             output.write_all(b"\n").context("Couldn't add newline")?;
         }
